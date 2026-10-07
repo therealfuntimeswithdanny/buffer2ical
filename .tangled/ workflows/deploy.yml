@@ -25,3 +25,4 @@ steps:
       npm install --global --prefix "$HOME/.local" wispctl@2.1.0
       export PATH="$HOME/.local/bin:$PATH"
       wispctl deploy "$WISP_HANDLE" --path "$SITE_PATH" --site "$SITE_NAME" --yes
+      
