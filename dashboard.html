@@ -4,19 +4,21 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard - Buffer2iCal</title>
+<script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="css/core.css">
 </head>
 <body>
   <div class="container">
     <h1>Buffer2iCal</h1>
-    <p id="loading">Loading...</p>
+    <p id="loading"><i class="fa-solid fa-spinner fa-spin-snap-4"></i> Loading...</p>
 
     <div id="app" hidden>
+      <p id="demoNotice" class="highlight" hidden>Demo mode — example data only. No account changes can be made.</p>
       <p>Logged in as: <strong id="name"></strong> (<span id="email"></span>)</p>
       <p><a href="#" id="logout">Sign out</a></p>
 
       <hr>
-      <h2>Your iCal Feed</h2>
+      <h2><i class="fa-solid fa-water"></i> Your iCal Feed</h2>
       <p>Add this URL to your calendar:</p>
       <code id="feedUrl"></code>
       <div class="row">
@@ -27,7 +29,7 @@
       <p id="status" style="margin-top:0.75rem;"></p>
 
       <hr>
-      <h2>Stats</h2>
+      <h2><i class="fa-solid fa-chart-column"></i>Stats</h2>
       <ul>
         <li>Total posts: <span id="total"></span></li>
         <li>Scheduled: <span id="scheduled"></span></li>
@@ -38,11 +40,11 @@
       </ul>
 
       <hr>
-      <h2>Recent Posts</h2>
+      <h2><i class="fa-solid fa-message"></i>Recent Posts</h2>
       <div id="recent"></div>
 
       <hr>
-      <h2>Danger Zone</h2>
+      <h2><i class="fa-solid fa-exclamation-triangle"></i> Danger Zone</h2>
       <button class="danger" id="delete">Disconnect Buffer2iCal</button>
     </div>
   </div>
@@ -55,10 +57,47 @@
         credentials: 'include',
         ...opts
       });
+    const devMode = new URLSearchParams(location.search).get('dev') === 'true';
+    const loadingFallback = setTimeout(() => {
+      const signIn = document.createElement('a');
+      signIn.href = 'https://buffer2ical.madebydanny.uk/auth/buffer';
+      signIn.textContent = 'Please Sign In';
+      $('loading').replaceChildren(signIn);
+    }, 2000);
+
     async function load() {
-      const res = await api('/api/me');
-      if (res.status === 401) return (location.href = '/');
-      const { user, feedUrl, stats } = await res.json();
+      let data;
+      if (devMode) {
+        data = {
+          user: {
+            name: 'Alex Morgan',
+            email: 'alex@example.com',
+            lastSync: new Date().toISOString()
+          },
+          feedUrl: 'https://example.com/feeds/demo.ics',
+          stats: {
+            totalEvents: 24,
+            scheduled: 8,
+            drafts: 3,
+            profiles: 2,
+            isStale: false,
+            recentPosts: [
+              { text: 'Launching our new spring collection this week! Take a first look at what is coming.', status: 'scheduled' },
+              { text: 'A behind-the-scenes look at how our team brings every idea to life.', status: 'scheduled' },
+              { text: 'Quick tip: make your content calendar work for you with a little planning.', status: 'draft' }
+            ]
+          }
+        };
+        $('demoNotice').hidden = false;
+        $('logout').hidden = true;
+        $('refresh').disabled = true;
+        $('delete').disabled = true;
+      } else {
+        const res = await api('/api/me');
+        if (res.status === 401) return (location.href = '/');
+        data = await res.json();
+      }
+      const { user, feedUrl, stats } = data;
 
       $('name').textContent = user.name;
       $('email').textContent = user.email || 'no email';
@@ -85,6 +124,7 @@
 
       $('loading').hidden = true;
       $('app').hidden = false;
+      clearTimeout(loadingFallback);
     }
 
     $('copy').onclick = () => navigator.clipboard.writeText($('feedUrl').textContent);

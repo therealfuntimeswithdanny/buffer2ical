@@ -11,10 +11,6 @@
     <h1 style="font-size:2rem;">Privacy Policy</h1>
     <p class="updated">Last updated: October 7, 2026</p>
 
-    <div class="highlight">
-      <p><strong>Short version:</strong> We only store what's needed to sync your Buffer posts to your calendar. We never sell your data, never show ads, and you can delete everything anytime.</p>
-    </div>
-
     <h2>What We Collect</h2>
     <p>When you connect your Buffer account, we store:</p>
     <ul>
@@ -34,19 +30,19 @@
     </ul>
 
     <h2>How It Works</h2>
-    <p>Buffer2iCal fetches your scheduled posts from Buffer's API every 5 minutes. This data is temporarily cached in Cloudflare's KV storage (located in EU/US data centers) so your calendar app can quickly download it. Cached data automatically expires after 24 hours.</p>
+    <p>Buffer2iCal fetches your scheduled posts from Buffer's API every 5 minutes. This data is temporarily cached in Cloudflare's KV storage so your calendar app can quickly download it. Cached data automatically expires after 24 hours.</p>
 
     <h2>Your Control</h2>
-    <p>You can delete your account and all associated data at any time from your dashboard. This immediately removes:</p>
+    <p>You can disconnect your account and all associated data at any time from the Buffer2iCal dashboard. This immediately removes:</p>
     <ul>
       <li>Your Buffer access token</li>
       <li>All cached post content</li>
-      <li>Your user profile</li>
+      <li>iCal feed/api URL</li>
       <li>All session data</li>
     </ul>
 
     <h2>Data Security</h2>
-    <p>All data is transmitted over HTTPS. Your Buffer access token is stored securely and never exposed in URLs or logs. The iCal feed URL contains a unique identifier that acts as a secret—anyone with this link can view your scheduled posts, so keep it private.</p>
+    <p>All data is transmitted over HTTPS. Your Buffer access token is stored securely and never exposed in URLs or logs. The iCal feed URL contains a unique identifier that acts as a secret, anyone with this link can view your scheduled posts. Keep it private.</p>
 
     <h2>Third-Party Services</h2>
     <p>We use two external services:</p>
@@ -56,7 +52,12 @@
     </ul>
 
     <h2>Open Source</h2>
-    <p>This service is free and open source. You can inspect the code, self-host it, or contribute improvements.</p>
+    <p>This service is free and open source. You can inspect the code, self-host it, or contribute improvements.
+      <br>
+      <ul>
+        <li><a href="https://tangled.org/danielmorrisey.com/buffer2ical/"><strong>View Source Code</strong></a> <i>(tangled)</i></li>
+      </ul>
+    </p>
 
     <h2>Contact</h2>
     <p>Questions or concerns? Reach out at <a href="https://bsky.app/profile/danielmorrisey.com">@danielmorrisey.com</a> on Bluesky.</p>
