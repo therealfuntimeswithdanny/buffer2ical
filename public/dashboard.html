@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard - Buffer2iCal</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Buffer2iCal</h1>
+    <p id="loading">Loading...</p>
+
+    <div id="app" hidden>
+      <p>Logged in as: <strong id="name"></strong> (<span id="email"></span>)</p>
+      <p><a href="#" id="logout">Sign out</a></p>
+
+      <hr>
+      <h2>Your iCal Feed</h2>
+      <p>Add this URL to your calendar:</p>
+      <code id="feedUrl"></code>
+      <div class="row">
+        <button id="copy">Copy URL</button>
+        <button id="refresh">Force Refresh</button>
+        <a id="test" href="#" target="_blank">Test feed</a>
+      </div>
+      <p id="status" style="margin-top:0.75rem;"></p>
+
+      <hr>
+      <h2>Stats</h2>
+      <ul>
+        <li>Total posts: <span id="total"></span></li>
+        <li>Scheduled: <span id="scheduled"></span></li>
+        <li>Drafts: <span id="drafts"></span></li>
+        <li>Channels: <span id="profiles"></span></li>
+        <li>Last sync: <span id="lastSync"></span></li>
+        <li>Status: <span id="state"></span></li>
+      </ul>
+
+      <hr>
+      <h2>Recent Posts</h2>
+      <div id="recent"></div>
+
+      <hr>
+      <h2>Danger Zone</h2>
+      <button class="danger" id="delete">Delete account</button>
+    </div>
+  </div>
+
+  <script src="/config.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+    const api = (path, opts = {}) => fetch(API_URL + path, { credentials: 'include', ...opts });
+
+    async function load() {
+      const res = await api('/api/me');
+      if (res.status === 401) return (location.href = '/');
+      const { user, feedUrl, stats } = await res.json();
+
+      $('name').textContent = user.name;
+      $('email').textContent = user.email || 'no email';
+      $('feedUrl').textContent = feedUrl;
+      $('test').href = feedUrl;
+      $('total').textContent = stats.totalEvents || 0;
+      $('scheduled').textContent = stats.scheduled || 0;
+      $('drafts').textContent = stats.drafts || 0;
+      $('profiles').textContent = stats.profiles || 0;
+      $('lastSync').textContent = user.lastSync ? new Date(user.lastSync).toLocaleString() : 'Never';
+      $('state').textContent = stats.isStale ? 'Needs refresh' : 'Up to date';
+
+      const recent = $('recent');
+      recent.replaceChildren();
+      if (!stats.recentPosts?.length) {
+        recent.textContent = 'No posts found';
+      } else {
+        for (const p of stats.recentPosts) {
+          const el = document.createElement('p');
+          el.textContent = p.text.slice(0, 60) + (p.text.length > 60 ? '...' : '') + ` (${p.status})`;
+          recent.appendChild(el);
+        }
+      }
+
+      $('loading').hidden = true;
+      $('app').hidden = false;
+    }
+
+    $('copy').onclick = () => navigator.clipboard.writeText($('feedUrl').textContent);
+
+    $('refresh').onclick = async () => {
+      $('status').textContent = 'Refreshing...';
+      try {
+        const res = await api('/api/refresh', { method: 'POST' });
+        const data = await res.json();
+        $('status').textContent = data.success ? 'Done!' : 'Failed: ' + data.error;
+        if (data.success) setTimeout(load, 500);
+      } catch (e) {
+        $('status').textContent = 'Error: ' + e.message;
+      }
+    };
+
+    $('logout').onclick = async e => {
+      e.preventDefault();
+      await api('/api/logout', { method: 'POST' });
+      location.href = '/';
+    };
+
+    $('delete').onclick = async () => {
+      if (!confirm('Delete account?')) return;
+      await api('/api/user', { method: 'DELETE' });
+      location.href = '/';
+    };
+
+    load();
+  </script>
+</body>
+</html>

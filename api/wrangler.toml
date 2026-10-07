@@ -1,0 +1,19 @@
+name = "buffer2ical-api"
+main = "index.js"
+compatibility_date = "2025-01-01"
+
+
+[vars]
+API_URL = "https://buffer2ical.madebydanny.uk"
+FRONTEND_URL = "https://buffer2ical.danielmo"
+
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "YOUR_USERS_KV_ID"
+
+[[kv_namespaces]]
+binding = "SESSIONS_KV"
+id = "YOUR_SESSIONS_KV_ID"
+
+[triggers]
+crons = ["*/5 * * * *"]

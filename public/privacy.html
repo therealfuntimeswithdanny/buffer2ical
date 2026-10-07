@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy - Buffer2iCal</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1 style="font-size:2rem;">Privacy Policy</h1>
+    <p class="updated">Last updated: October 7, 2026</p>
+
+    <div class="highlight">
+      <p><strong>Short version:</strong> We only store what's needed to sync your Buffer posts to your calendar. We never sell your data, never show ads, and you can delete everything anytime.</p>
+    </div>
+
+    <h2>What We Collect</h2>
+    <p>When you connect your Buffer account, we store:</p>
+    <ul>
+      <li>Your Buffer user ID and email address</li>
+      <li>Your Buffer OAuth access token (to fetch your scheduled posts)</li>
+      <li>Your scheduled post content, channels, and times (cached for 24 hours)</li>
+      <li>A session cookie to keep you logged in</li>
+    </ul>
+
+    <h2>What We Don't Do</h2>
+    <ul>
+      <li>We don't sell your data</li>
+      <li>We don't show ads or use analytics trackers</li>
+      <li>We don't share your information with third parties</li>
+      <li>We don't access your Buffer account after you disconnect</li>
+      <li>We don't store your posts longer than 24 hours (cache expiry)</li>
+    </ul>
+
+    <h2>How It Works</h2>
+    <p>Buffer2iCal fetches your scheduled posts from Buffer's API every 5 minutes. This data is temporarily cached in Cloudflare's KV storage (located in EU/US data centers) so your calendar app can quickly download it. Cached data automatically expires after 24 hours.</p>
+
+    <h2>Your Control</h2>
+    <p>You can delete your account and all associated data at any time from your dashboard. This immediately removes:</p>
+    <ul>
+      <li>Your Buffer access token</li>
+      <li>All cached post content</li>
+      <li>Your user profile</li>
+      <li>All session data</li>
+    </ul>
+
+    <h2>Data Security</h2>
+    <p>All data is transmitted over HTTPS. Your Buffer access token is stored securely and never exposed in URLs or logs. The iCal feed URL contains a unique identifier that acts as a secret—anyone with this link can view your scheduled posts, so keep it private.</p>
+
+    <h2>Third-Party Services</h2>
+    <p>We use two external services:</p>
+    <ul>
+      <li><strong>Buffer</strong> - to fetch your scheduled posts (subject to <a href="https://buffer.com/privacy">Buffer's Privacy Policy</a>)</li>
+      <li><strong>Cloudflare</strong> - to host this service and store cached data (subject to <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's Privacy Policy</a>)</li>
+    </ul>
+
+    <h2>Open Source</h2>
+    <p>This service is free and open source. You can inspect the code, self-host it, or contribute improvements.</p>
+
+    <h2>Contact</h2>
+    <p>Questions or concerns? Reach out at <a href="https://bsky.app/profile/danielmorrisey.com">@danielmorrisey.com</a> on Bluesky.</p>
+
+    <a href="/">← Back to Buffer2iCal</a>
+  </div>
+</body>
+</html>

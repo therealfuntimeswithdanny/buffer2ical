@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buffer2iCal</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body class="center">
+  <div class="container narrow">
+    <h1>Buffer2iCal</h1>
+    <p class="byline"><i>By <a href="https://bsky.app/profile/danielmorrisey.com">@danielmorrisey.com</a></i></p>
+    <p id="error" class="error" hidden></p>
+    <p class="tagline"><b>Know what's next:</b> Sync your scheduled Buffer posts to any calendar app</p>
+    <p><a id="connect" class="cta" href="#">Connect with Buffer</a></p>
+    <hr>
+    <p class="how">How it works:</p>
+    <ol>
+      <li>Connect your Buffer account via OAuth</li>
+      <li>Copy your iCal URL</li>
+      <li>Add to Proton Calendar, Google Calendar, etc.</li>
+      <li>Done! Auto-syncs every 5 minutes.</li>
+      <li>Free &amp; Open Source</li>
+    </ol>
+    <p style="margin-top:2rem;font-size:0.85rem;"><a href="/privacy">Privacy Policy</a></p>
+  </div>
+  <script src="/config.js"></script>
+  <script>
+    document.getElementById('connect').href = API_URL + '/auth/buffer';
+    const err = new URLSearchParams(location.search).get('error');
+    if (err) {
+      const el = document.getElementById('error');
+      el.textContent = 'Authorization failed: ' + err;
+      el.hidden = false;
+    }
+  </script>
+</body>
+</html>
