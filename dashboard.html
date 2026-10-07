@@ -50,8 +50,11 @@
   <script src="js/config.js"></script>
   <script>
     const $ = id => document.getElementById(id);
-    const api = (path, opts = {}) => fetch(API_URL + path, { credentials: 'include', ...opts });
-
+    const api = (path, opts = {}) =>
+      fetch(path, {
+        credentials: 'include',
+        ...opts
+      });
     async function load() {
       const res = await api('/api/me');
       if (res.status === 401) return (location.href = '/');
