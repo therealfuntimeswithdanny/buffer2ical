@@ -1,18 +1,14 @@
-name = "buffer-2-ical"
-main = "index.js"
-compatibility_date = "2025-01-01"
-
-[vars]
-API_URL = "https://buffer2ical.madebydanny.uk"
-FRONTEND_URL = "https://buffer2ical.danielmorrisey.com"
-
-[[kv_namespaces]]
-binding = "USERS_KV"
-id = "f8ca842b35d0464cb5e0149c9850b296"
-
-[[kv_namespaces]]
-binding = "SESSIONS_KV"
-id = "05bcc6a2f4904aa18cfb216519a0dbd1"
-
-[triggers]
-crons = ["*/5 * * * *"]
+{
+  "name": "buffer-2-ical",
+  "main": "index.js",
+  "compatibility_date": "2025-01-01",
+  "vars": {
+    "API_URL": "https://buffer2ical.madebydanny.uk",
+    "FRONTEND_URL": "https://buffer2ical.danielmorrisey.com"
+  },
+  "kv_namespaces": [
+    { "binding": "USERS_KV", "id": "f8ca842b35d0464cb5e0149c9850b296" },
+    { "binding": "SESSIONS_KV", "id": "05bcc6a2f4904aa18cfb216519a0dbd1" }
+  ],
+  "triggers": { "crons": ["*/5 * * * *"] }
+}
