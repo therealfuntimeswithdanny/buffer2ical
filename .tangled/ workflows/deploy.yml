@@ -1,0 +1,27 @@
+when:
+  - event: ["push"]
+    branch: ["main"]
+  - event: ["manual"]
+
+engine: microvm
+image: nixos
+
+dependencies:
+  - nodejs
+
+environment:
+  WISP_HANDLE: "danielmorrisey.com"
+  SITE_NAME: "ical"
+  SITE_PATH: "./dist/public"
+
+steps:
+  - name: build
+    command: |
+      npm ci
+      npm run build
+
+  - name: deploy
+    command: |
+      npm install --global --prefix "$HOME/.local" wispctl@2.1.0
+      export PATH="$HOME/.local/bin:$PATH"
+      wispctl deploy "$WISP_HANDLE" --path "$SITE_PATH" --site "$SITE_NAME" --yes
