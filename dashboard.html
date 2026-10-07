@@ -43,7 +43,7 @@
 
       <hr>
       <h2>Danger Zone</h2>
-      <button class="danger" id="delete">Delete account</button>
+      <button class="danger" id="delete">Disconnect Buffer2iCal</button>
     </div>
   </div>
 
@@ -108,7 +108,7 @@
     };
 
     $('delete').onclick = async () => {
-      if (!confirm('Delete account?')) return;
+      if (!confirm('Disconnect Buffer2iCal? This will stop syncing with connected calendars and delete the iCal API route.')) return;
       await api('/api/user', { method: 'DELETE' });
       location.href = '/';
     };
