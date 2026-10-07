@@ -2,7 +2,6 @@ name = "buffer2ical"
 main = "index.js"
 compatibility_date = "2025-01-01"
 
-
 [vars]
 API_URL = "https://buffer2ical.madebydanny.uk"
 FRONTEND_URL = "https://buffer2ical.danielmorrisey.com"
