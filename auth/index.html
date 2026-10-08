@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buffer2iCal – Please Login</title>
+<link rel="icon" type="image/png" href="/media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<div class="layout all">
+  <aside>
+    <h1>Buffer2iCal</h1>
+    <h2 class="sub">Please Login</h2>
+    <p class="intro">Please Login into Buffer2iCal using one of the methods below to access your dashboard<br><a href="/index.html">Back to home page</a></p>
+
+    <div class="nav-item">
+      <span class="nav-label">Most Secure &amp; Recommended¹</span>
+      <a class="nav-btn" href="oauth.html"><i class="fa-brands fa-buffer"></i>Buffer OAuth</a>
+    </div>
+    <div class="nav-item nav-item--disabled">
+      <span class="nav-label">Less Secure &amp; Doesn't Expire²</span>
+      <a class="nav-btn" href="apikey.html"><i class="fa-solid fa-key"></i>API Key</a>
+    </div>
+    <div class="nav-item nav-item--disabled">
+      <span class="nav-label">Not Recommended &amp; Alpha³</span>
+      <a class="nav-btn" href="email.html"><i class="fa-solid fa-envelope"></i>Buffer Email</a>
+    </div>
+    <p class="agree">By clicking one of the buttons above you agree to the risks displayed to your right</p>
+  </aside>
+
+  <main class="notes-all">
+    <p>¹Unlike API Keys, OAuth sessions expire after set amount of time. When your OAuth Session is about to expire (within 6 hours) you will receive email notice to your Buffer Account Email⁴.</p>
+    <p>²Unlike OAuth API keys never expire (unless set by the user in the Buffer Dashboard). API keys are less secure, anyone with your API key will have access to your Buffer Account (access controls are set by the user). API Keys don't use 2/MFA and don't require the user to enter their password or email. Do not share your key.</p>
+    <p>³We do not recommended using Email Sign in. You must have already connected your Buffer Account to this app. Using Email Sign in will send a 6 digit code to your email. Your email must be the same as your Buffer Account</p>
+    <p>⁴ OAuth Session timeout detection is in beta testing, you may receive unwanted emails form sessiontimeout@alerts.buffer2ical.madebydanny.uk</p>
+  </main>
+</div>
+</body>
+</html>

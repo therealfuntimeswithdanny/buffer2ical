@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dashboard - Buffer2iCal</title>
+<link rel="icon" type="image/jpeg" href="/media/favicon.jpg">
 <script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="css/core.css">
 </head>
@@ -15,6 +16,10 @@
     <div id="app" hidden>
       <p id="demoNotice" class="highlight" hidden>Demo mode — example data only. No account changes can be made.</p>
       <p>Logged in as: <strong id="name"></strong> (<span id="email"></span>)</p>
+      <div class="row">
+        <button id="refreshAccount">Refresh account</button>
+        <span id="accountStatus" role="status" aria-live="polite"></span>
+      </div>
       <p><a href="#" id="logout">Sign out</a></p>
 
       <hr>
@@ -53,14 +58,14 @@
   <script>
     const $ = id => document.getElementById(id);
     const api = (path, opts = {}) =>
-      fetch(path, {
+      fetch(`${API_URL}${path}`, {
         credentials: 'include',
         ...opts
       });
     const devMode = new URLSearchParams(location.search).get('dev') === 'true';
     const loadingFallback = setTimeout(() => {
       const signIn = document.createElement('a');
-      signIn.href = 'https://buffer2ical.madebydanny.uk/auth/buffer';
+      signIn.href = '/auth/oauth.html';
       signIn.textContent = 'Please Sign In';
       $('loading').replaceChildren(signIn);
     }, 2000);
@@ -91,10 +96,11 @@
         $('demoNotice').hidden = false;
         $('logout').hidden = true;
         $('refresh').disabled = true;
+        $('refreshAccount').disabled = true;
         $('delete').disabled = true;
       } else {
         const res = await api('/api/me');
-        if (res.status === 401) return (location.href = '/');
+        if (res.status === 401) return (location.href = '/auth/oauth.html');
         data = await res.json();
       }
       const { user, feedUrl, stats } = data;
@@ -128,6 +134,27 @@
     }
 
     $('copy').onclick = () => navigator.clipboard.writeText($('feedUrl').textContent);
+
+    $('refreshAccount').onclick = async () => {
+      const button = $('refreshAccount');
+      const status = $('accountStatus');
+      button.disabled = true;
+      status.textContent = 'Refreshing account...';
+      try {
+        const res = await api('/api/account/refresh', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || `Request failed (${res.status})`);
+        }
+        $('name').textContent = data.user.name;
+        $('email').textContent = data.user.email || 'no email';
+        status.textContent = 'Account details refreshed.';
+      } catch (e) {
+        status.textContent = 'Failed to refresh account: ' + e.message;
+      } finally {
+        button.disabled = false;
+      }
+    };
 
     $('refresh').onclick = async () => {
       $('status').textContent = 'Refreshing...';

@@ -2,7 +2,7 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) =>
   __defProp(target, "name", { value, configurable: true });
 
-const SESSION_TTL = 86400 * 365; // 1 year
+const SESSION_TTL = 86400 * 365 * 2; // 2 years
 
 var index_default = {
   async fetch(request, env) {
@@ -40,6 +40,8 @@ var index_default = {
         res = await handleMe(request, env);
       } else if (path === "/api/refresh" && method === "POST") {
         res = await handleRefresh(request, env);
+      } else if (path === "/api/account/refresh" && method === "POST") {
+        res = await handleAccountRefresh(request, env);
       } else if (path === "/api/logout" && method === "POST") {
         res = await handleLogout(request, env);
       } else if (path === "/api/user" && method === "DELETE") {
@@ -281,7 +283,7 @@ async function handleOAuthCallback(request, env) {
     JSON.stringify(userRecord)
   );
 
-  // One-year persistent session
+  // Two-year persistent session
   const sessionId = crypto.randomUUID();
 
   await env.SESSIONS_KV.put(
@@ -307,6 +309,47 @@ __name(
   handleOAuthCallback,
   "handleOAuthCallback"
 );
+
+async function fetchBufferAccountProfile(accessToken) {
+  const response = await fetch("https://api.buffer.com", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      query: `{
+        account {
+          email
+          name
+        }
+      }`
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Buffer account HTTP error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (data.errors?.length) {
+    console.error(
+      "Buffer account GraphQL errors:",
+      JSON.stringify(data.errors)
+    );
+    throw new Error(
+      data.errors[0]?.message || "Buffer account query failed"
+    );
+  }
+
+  if (!data.data?.account) {
+    throw new Error("Buffer account data was not returned");
+  }
+
+  return data.data.account;
+}
+
+__name(fetchBufferAccountProfile, "fetchBufferAccountProfile");
 
 // =========================================================
 // PKCE
@@ -407,7 +450,7 @@ async function handleMe(request, env) {
       env
     );
 
-  // Renew session for another year
+  // Renew session for another two years
   const sessionId =
     getSessionId(request);
 
@@ -446,6 +489,58 @@ async function handleMe(request, env) {
 }
 
 __name(handleMe, "handleMe");
+
+async function handleAccountRefresh(request, env) {
+  if (!originOk(request, env)) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  const userId = await getUserIdFromSession(request, env);
+  if (!userId) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  const user = await getUser(userId, env);
+  if (!user) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+
+  try {
+    const account = await fetchBufferAccountProfile(user.accessToken);
+    const updatedUser = {
+      ...user,
+      email: account.email ?? user.email,
+      name:
+        account.name ||
+        account.email?.split("@")[0] ||
+        user.name
+    };
+
+    await env.USERS_KV.put(
+      `user:${userId}`,
+      JSON.stringify(updatedUser)
+    );
+
+    return json({
+      success: true,
+      user: {
+        name: updatedUser.name,
+        email: updatedUser.email
+      }
+    });
+  } catch (e) {
+    console.error("Buffer account refresh failed:", e);
+    return json(
+      {
+        success: false,
+        error: e.message || "Unable to refresh account"
+      },
+      502
+    );
+  }
+}
+
+__name(handleAccountRefresh, "handleAccountRefresh");
 
 async function handleRefresh(
   request,

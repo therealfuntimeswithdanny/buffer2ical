@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buffer2iCal – Sign In Using OAuth</title>
+<link rel="icon" type="image/jpeg" href="/media/favicon.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Buffer2iCal</h1>
+    <h2 class="sub">Please Login</h2>
+    <p class="intro">Please Login into Buffer2iCal using one of the methods below to access your dashboard<br><a href="index.html">Choose a different method</a></p>
+
+    <div class="nav-item">
+      <span class="nav-label">Most Secure &amp; Recommended¹</span>
+      <a class="nav-btn active" href="oauth.html"><i class="fa-brands fa-buffer"></i>Buffer OAuth</a>
+    </div>
+    <div class="nav-item nav-item--disabled">
+      <span class="nav-label">Less Secure &amp; Doesn't Expire²</span>
+      <a class="nav-btn" href="apikey.html"><i class="fa-solid fa-key"></i>API Key</a>
+    </div>
+    <div class="nav-item nav-item--disabled">
+      <span class="nav-label">Not Recommended &amp; Alpha³</span>
+      <a class="nav-btn" href="email.html"><i class="fa-solid fa-envelope"></i>Buffer Email</a>
+    </div>
+  </aside>
+
+  <main class="panel">
+    <h2>Sign In Using OAuth</h2>
+    <p class="lead">Sign In Using Buffer OAuth. This will open the Buffer Login Page in a new tab.</p>
+
+    <a class="action" href="https://buffer2ical.madebydanny.uk/auth/buffer" target="_blank" rel="noopener"><i class="fa-brands fa-buffer"></i>Login in new tab¹</a>
+    <p class="fine">By clicking this button you agree to the risks listed below and our <a href="/privacy.html" style="color:inherit">privacy policy</a></p>
+
+    <div class="notes">
+      <p>¹Unlike API Keys, OAuth sessions expire after set amount of time. When your OAuth Session is about to expire (within 6 hours) you will receive email notice to your Buffer Account Email⁴.</p>
+      <p>⁴OAuth Session timeout detection is in beta testing, you may receive unwanted emails form sessiontimeout@alerts.buffer2ical.madebydanny.uk</p>
+    </div>
+  </main>
+</div>
+</body>
+</html>

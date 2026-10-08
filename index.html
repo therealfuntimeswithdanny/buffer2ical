@@ -3,7 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Buffer2iCal</title>
+<title>Buffer2iCal – Sync Your Buffer Schedule with Any Calendar</title>
+<meta name="description" content="Automatically sync your Buffer Queue with Google Calendar, Proton Calendar, and other calendar apps using a private iCal feed.">
+<link rel="canonical" href="https://buffer2ical.madebydanny.uk/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Buffer2iCal – Your Buffer Schedule in Your Calendar">
+<meta property="og:description" content="Automatically sync your Buffer Queue with Google Calendar, Proton Calendar, and other calendar apps using a private iCal feed.">
+<meta property="og:url" content="https://buffer2ical.madebydanny.uk/">
+<meta property="og:image" content="https://buffer2ical.madebydanny.uk/media/preview.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Buffer2iCal – Your Buffer Schedule in Your Calendar">
+<meta name="twitter:description" content="Automatically sync your Buffer Queue with Google Calendar, Proton Calendar, and other calendar apps using a private iCal feed.">
+<meta name="twitter:image" content="https://buffer2ical.madebydanny.uk/media/preview.jpg">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" href="/media/favicon.png">
 <link rel="stylesheet" href="css/core.css">
 <script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
 </head>
@@ -14,7 +27,7 @@
     <p id="error" class="error" hidden></p>
     <h2 class="home-headline">Your Buffer schedule,<br> right in your calendar.</h2>
     <p class="tagline">See what's coming up and stay on top of every scheduled post. Automatically sync your Buffer Queue with Google Calendar, Proton Calendar, and more.</p>
-    <p><a id="connect" class="cta home-cta" href="#"><i class="fa-brands fa-buffer"></i> Connect Buffer</a></p>
+    <p><a id="connect" class="cta home-cta" href="/dashboard.html"><i class="fa-brands fa-buffer"></i> Connect Buffer</a></p>
     <hr>
     <p class="how">How it works:</p>
     <ol class="home-steps">
@@ -26,7 +39,6 @@
   </div>
   <script src="js/config.js"></script>
   <script>
-    document.getElementById('connect').href = API_URL + '/auth/buffer';
     const err = new URLSearchParams(location.search).get('error');
     if (err) {
       const el = document.getElementById('error');
