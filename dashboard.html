@@ -63,12 +63,6 @@
         ...opts
       });
     const devMode = new URLSearchParams(location.search).get('dev') === 'true';
-    const loadingFallback = setTimeout(() => {
-      const signIn = document.createElement('a');
-      signIn.href = '/auth/oauth.html';
-      signIn.textContent = 'Please Sign In';
-      $('loading').replaceChildren(signIn);
-    }, 2000);
 
     async function load() {
       let data;
@@ -100,7 +94,10 @@
         $('delete').disabled = true;
       } else {
         const res = await api('/api/me');
-        if (res.status === 401) return (location.href = '/auth/oauth.html');
+        if (res.status === 401) {
+          location.replace('/app');
+          return;
+        }
         data = await res.json();
       }
       const { user, feedUrl, stats } = data;
@@ -130,7 +127,6 @@
 
       $('loading').hidden = true;
       $('app').hidden = false;
-      clearTimeout(loadingFallback);
     }
 
     $('copy').onclick = () => navigator.clipboard.writeText($('feedUrl').textContent);
