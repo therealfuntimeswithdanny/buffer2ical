@@ -38,6 +38,12 @@ var index_default = {
     try {
       if (path === "/api/me" && method === "GET") {
         res = await handleMe(request, env);
+      } else if (path === "/api/auth/apikey" && method === "POST") {
+        res = await handleApiKeySignIn(request, env);
+      } else if (path === "/api/auth/pending" && method === "GET") {
+        res = await handlePendingSignIn(request, env);
+      } else if (path === "/api/auth/organization" && method === "POST") {
+        res = await handleOrganizationSignIn(request, env);
       } else if (path === "/api/refresh" && method === "POST") {
         res = await handleRefresh(request, env);
       } else if (path === "/api/account/refresh" && method === "POST") {
@@ -243,72 +249,201 @@ async function handleOAuthCallback(request, env) {
   }
 
   const bufferUser = userData.data?.account || {};
-  const organization = bufferUser.organizations?.[0];
-
-  if (!organization?.id) {
+  if (!bufferUser.id || !bufferUser.organizations?.length) {
     return redirectToFrontend(
       env,
       "/?error=no_buffer_organization"
     );
   }
 
-  const userId = bufferUser.id || crypto.randomUUID();
-  const oldUser = await getUser(userId, env);
-
-  const userRecord = {
-    ...(oldUser || {}),
-    bufferId: bufferUser.id,
-    organizationId: organization.id,
-    organizationName: organization.name,
-    email: bufferUser.email,
-    name:
-      bufferUser.name ||
-      bufferUser.email?.split("@")[0] ||
-      "User",
-    accessToken: tokens.access_token,
-    refreshToken:
-      tokens.refresh_token ||
-      oldUser?.refreshToken ||
-      null,
-    createdAt:
-      oldUser?.createdAt ||
-      new Date().toISOString(),
-    lastSync:
-      oldUser?.lastSync ||
-      null
-  };
-
-  await env.USERS_KV.put(
-    `user:${userId}`,
-    JSON.stringify(userRecord)
-  );
-
-  // Two-year persistent session
-  const sessionId = crypto.randomUUID();
-
+  const pendingId = crypto.randomUUID();
   await env.SESSIONS_KV.put(
-    `session:${sessionId}`,
-    userId,
-    {
-      expirationTtl: SESSION_TTL
-    }
+    `auth-pending:${pendingId}`,
+    JSON.stringify({
+      bufferUser,
+      organizations: bufferUser.organizations,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token || null
+    }),
+    { expirationTtl: 600 }
   );
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location:
-        `${env.FRONTEND_URL}/dashboard`,
-      "Set-Cookie":
-        sessionCookie(sessionId)
-    }
-  });
+  return redirectToFrontend(
+    env,
+    `/app/organization.html?pending=${encodeURIComponent(pendingId)}`
+  );
 }
 
 __name(
   handleOAuthCallback,
   "handleOAuthCallback"
 );
+
+async function handleApiKeySignIn(request, env) {
+  if (!originOk(request, env)) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid request body." }, 400);
+  }
+
+  const apiKey = typeof body?.apiKey === "string" ? body.apiKey.trim() : "";
+  if (!apiKey || apiKey.length > 512) {
+    return json({ error: "Enter a valid Buffer API key." }, 400);
+  }
+
+  const accountResult = await fetch("https://api.buffer.com", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      query: `{
+        account {
+          id
+          email
+          name
+          organizations {
+            id
+            name
+          }
+        }
+      }`
+    })
+  });
+
+  if (!accountResult.ok) {
+    if (accountResult.status === 401) {
+      return json({ error: "Buffer rejected that API key. Check it and try again." }, 401);
+    }
+    console.error("Buffer API key verification failed:", accountResult.status);
+    return json({ error: "Could not verify the API key with Buffer. Please try again." }, 502);
+  }
+
+  const accountData = await accountResult.json();
+  if (accountData.errors?.length || !accountData.data?.account?.id) {
+    console.error("Buffer account query failed during API key sign-in.");
+    return json({ error: "Could not verify the API key with Buffer. Please try again." }, 502);
+  }
+
+  const bufferUser = accountData.data.account;
+  if (!bufferUser.organizations?.length) {
+    return json({ error: "No Buffer organizations were found for this account." }, 400);
+  }
+
+  const pendingId = crypto.randomUUID();
+  await env.SESSIONS_KV.put(
+    `auth-pending:${pendingId}`,
+    JSON.stringify({
+      bufferUser,
+      organizations: bufferUser.organizations,
+      apiKey
+    }),
+    { expirationTtl: 600 }
+  );
+
+  return json({ pendingId });
+}
+
+__name(handleApiKeySignIn, "handleApiKeySignIn");
+
+async function handlePendingSignIn(request, env) {
+  if (!originOk(request, env)) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  const pendingId = new URL(request.url).searchParams.get("pending");
+  if (!pendingId) {
+    return json({ error: "Sign-in expired. Please start again." }, 400);
+  }
+
+  const pending = await env.SESSIONS_KV.get(`auth-pending:${pendingId}`, "json");
+  if (!pending) {
+    return json({ error: "Sign-in expired. Please start again." }, 404);
+  }
+
+  return json({
+    organizations: pending.organizations.map(({ id, name }) => ({ id, name }))
+  });
+}
+
+__name(handlePendingSignIn, "handlePendingSignIn");
+
+async function handleOrganizationSignIn(request, env) {
+  if (!originOk(request, env)) {
+    return json({ error: "Forbidden" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid request body." }, 400);
+  }
+  if (typeof body?.pendingId !== "string" || typeof body?.organizationId !== "string") {
+    return json({ error: "Choose a Buffer organization to continue." }, 400);
+  }
+
+  const pendingKey = `auth-pending:${body.pendingId}`;
+  const pending = await env.SESSIONS_KV.get(pendingKey, "json");
+  if (!pending) {
+    return json({ error: "Sign-in expired. Please start again." }, 404);
+  }
+
+  const organization = pending.organizations.find(
+    item => item.id === body.organizationId
+  );
+  if (!organization) {
+    return json({ error: "That organization is not available for this Buffer account." }, 403);
+  }
+
+  const userId = pending.bufferUser.id;
+  const oldUser = await getUser(userId, env);
+  const userRecord = {
+    ...(oldUser || {}),
+    bufferId: userId,
+    organizationId: organization.id,
+    organizationName: organization.name,
+    email: pending.bufferUser.email || oldUser?.email,
+    name:
+      pending.bufferUser.name ||
+      pending.bufferUser.email?.split("@")[0] ||
+      oldUser?.name ||
+      "User",
+    accessToken:
+      pending.accessToken ||
+      oldUser?.accessToken ||
+      pending.apiKey,
+    apiKey: pending.apiKey || oldUser?.apiKey,
+    refreshToken:
+      pending.refreshToken ||
+      oldUser?.refreshToken ||
+      null,
+    createdAt: oldUser?.createdAt || new Date().toISOString(),
+    lastSync: oldUser?.lastSync || null
+  };
+
+  await env.USERS_KV.put(`user:${userId}`, JSON.stringify(userRecord));
+  await env.SESSIONS_KV.delete(pendingKey);
+
+  const sessionId = crypto.randomUUID();
+  await env.SESSIONS_KV.put(`session:${sessionId}`, userId, {
+    expirationTtl: SESSION_TTL
+  });
+
+  return json(
+    { success: true },
+    200,
+    { "Set-Cookie": sessionCookie(sessionId) }
+  );
+}
+
+__name(handleOrganizationSignIn, "handleOrganizationSignIn");
 
 async function fetchBufferAccountProfile(accessToken) {
   const response = await fetch("https://api.buffer.com", {

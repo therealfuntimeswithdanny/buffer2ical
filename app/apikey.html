@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buffer2iCal – Sign In Using an API Key</title>
+<link rel="icon" type="image/png" href="/media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Buffer2iCal</h1>
+    <h2 class="sub">Please Login</h2>
+    <p class="intro">Sign in using one of the methods below to access your dashboard<br><a href="/app/index.html">Choose a different method</a></p>
+
+    <div class="nav-item">
+      <span class="nav-label">Most Secure &amp; Recommended¹</span>
+      <a class="nav-btn" href="/app/oauth.html"><i class="fa-brands fa-buffer"></i>Buffer OAuth</a>
+    </div>
+    <div class="nav-item">
+      <span class="nav-label">Less Secure &amp; Doesn't Expire²</span>
+      <a class="nav-btn active" href="/app/apikey.html"><i class="fa-solid fa-key"></i>API Key</a>
+    </div>
+    <div class="nav-item nav-item--disabled">
+      <span class="nav-label">Not Recommended &amp; Alpha³</span>
+      <a class="nav-btn" href="/app/email.html"><i class="fa-solid fa-envelope"></i>Buffer Email</a>
+    </div>
+  </aside>
+
+  <main class="panel">
+    <h2>Sign In Using an API Key</h2>
+    <p class="lead">Enter your Buffer API key. It will be sent securely to Buffer for verification and stored in your Buffer2iCal account. If you already use OAuth with this Buffer account, the key will be added to that account.</p>
+    <form id="apiKeyForm">
+      <label for="apiKey">Buffer API key</label>
+      <input id="apiKey" name="apiKey" type="password" autocomplete="off" required>
+      <button class="action" type="submit">Continue</button>
+    </form>
+    <p id="error" class="fine" role="alert"></p>
+    <p class="fine">API keys are long-lived credentials. Anyone with your key can access your Buffer account. You can revoke it in Buffer settings.</p>
+    <p class="fine">By continuing you agree to our <a href="/privacy.html">privacy policy</a>.</p>
+  </main>
+</div>
+<script src="/js/config.js"></script>
+<script>
+  const form = document.getElementById('apiKeyForm');
+  const error = document.getElementById('error');
+  const button = form.querySelector('button');
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    error.textContent = '';
+    button.disabled = true;
+    button.textContent = 'Checking key...';
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/apikey`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: form.elements.apiKey.value })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+      location.href = `/app/organization.html?pending=${encodeURIComponent(data.pendingId)}`;
+    } catch (e) {
+      error.textContent = e.message;
+      button.disabled = false;
+      button.textContent = 'Continue';
+    }
+  });
+</script>
+</body>
+</html>

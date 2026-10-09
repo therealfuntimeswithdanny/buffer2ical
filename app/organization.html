@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buffer2iCal – Choose an Organization</title>
+<link rel="icon" type="image/png" href="/media/favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<script src="https://kit.fontawesome.com/8f1701cd51.js" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/auth.css">
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <h1>Buffer2iCal</h1>
+    <h2 class="sub">Choose an organization</h2>
+    <p class="intro">Select which Buffer organization to connect to your calendar feed.</p>
+  </aside>
+  <main class="panel">
+    <h2>Your Buffer organizations</h2>
+    <p class="lead">Your calendar feed will include posts from the organization you select.</p>
+    <form id="organizationForm" hidden>
+      <label for="organization">Organization</label>
+      <select id="organization" name="organization" required></select>
+      <button class="action" type="submit">Continue</button>
+    </form>
+    <p id="status" class="fine" role="status" aria-live="polite">Loading organizations...</p>
+  </main>
+</div>
+<script src="/js/config.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const pendingId = params.get('pending');
+  const form = document.getElementById('organizationForm');
+  const select = document.getElementById('organization');
+  const status = document.getElementById('status');
+  const button = form.querySelector('button');
+
+  async function loadOrganizations() {
+    if (!pendingId) throw new Error('Sign-in expired. Please start again.');
+    const response = await fetch(
+      `${API_URL}/api/auth/pending?pending=${encodeURIComponent(pendingId)}`
+    );
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Request failed (${response.status})`);
+
+    for (const org of data.organizations) {
+      const option = document.createElement('option');
+      option.value = org.id;
+      option.textContent = org.name;
+      select.append(option);
+    }
+    form.hidden = false;
+    status.textContent = '';
+    history.replaceState(null, '', location.pathname);
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    status.textContent = '';
+    button.disabled = true;
+    button.textContent = 'Connecting...';
+    try {
+      const response = await fetch(`${API_URL}/api/auth/organization`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          pendingId,
+          organizationId: select.value
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || `Request failed (${response.status})`);
+      }
+      location.replace('/dashboard.html');
+    } catch (e) {
+      status.textContent = e.message;
+      button.disabled = false;
+      button.textContent = 'Continue';
+    }
+  });
+
+  loadOrganizations().catch(e => {
+    status.textContent = e.message;
+  });
+</script>
+</body>
+</html>
