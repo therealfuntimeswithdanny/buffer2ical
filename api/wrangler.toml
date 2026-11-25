@@ -1,4 +1,4 @@
-name = "buffer2ical-api"
+name = "buffer-2-ical"
 main = "src/index.ts"
 compatibility_date = "2025-01-01"
 workers_dev = false
@@ -12,20 +12,22 @@ FRONTEND_URL = "https://buffer2ical.madebydanny.uk"
 
 [[kv_namespaces]]
 binding = "USERS_KV"
-id = "YOUR_USERS_KV_ID"
+id = "f8ca842b35d0464cb5e0149c9850b296"
 
 [[kv_namespaces]]
 binding = "SESSIONS_KV"
-id = "YOUR_SESSIONS_KV_ID"
+id = "05bcc6a2f4904aa18cfb216519a0dbd1"
 
 # Secrets (set via `wrangler secret put`):
 #   BUFFER_CLIENT_ID
 #   BUFFER_CLIENT_SECRET
 
 # The worker serves the static frontend itself — everything lives on one domain.
+# run_worker_first: the worker decides what goes to assets vs. API routes.
 [assets]
 directory = "../public"
 binding = "ASSETS"
+run_worker_first = true
 
 [triggers]
 crons = ["*/5 * * * *"]
