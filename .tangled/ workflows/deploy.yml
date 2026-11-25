@@ -9,18 +9,12 @@ dependencies:
   - nodejs
 
 environment:
-  WISP_HANDLE: "danielmorrisey.com"
-  SITE_NAME: "ical"
-  SITE_PATH: "./dist/public"
+  # Set CLOUDFLARE_API_TOKEN as a CI secret with permission to deploy this worker.
+  CLOUDFLARE_ACCOUNT_ID: ""
 
 steps:
-  - name: build
-    command: |
-      npm ci
-      npm run build
-
   - name: deploy
     command: |
-      npm install --global --prefix "$HOME/.local" wispctl@2.1.0
-      export PATH="$HOME/.local/bin:$PATH"
-      wispctl deploy "$WISP_HANDLE" --path "$SITE_PATH" --site "$SITE_NAME" --yes
+      cd api
+      npm ci
+      npx wrangler deploy

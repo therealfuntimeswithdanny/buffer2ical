@@ -15,6 +15,7 @@
 
     <div id="app" hidden>
       <p id="demoNotice" class="highlight" hidden>Demo mode — example data only. No account changes can be made.</p>
+      <p id="authError" class="highlight" hidden></p>
       <p>Logged in as: <strong id="name"></strong> (<span id="email"></span>)</p>
       <div class="row">
         <button id="refreshAccount">Refresh account</button>
@@ -50,7 +51,11 @@
 
       <hr>
       <h2><i class="fa-solid fa-exclamation-triangle"></i> Danger Zone</h2>
-      <button class="danger" id="delete">Disconnect Buffer2iCal</button>
+      <div class="row">
+        <button id="resetSessions">Sign out all devices</button>
+        <button class="danger" id="delete">Disconnect Buffer2iCal</button>
+      </div>
+      <p id="sessionsStatus" role="status" aria-live="polite"></p>
     </div>
   </div>
 
@@ -92,6 +97,7 @@
         $('refresh').disabled = true;
         $('refreshAccount').disabled = true;
         $('delete').disabled = true;
+        $('resetSessions').disabled = true;
       } else {
         const res = await api('/api/me');
         if (res.status === 401) {
@@ -100,7 +106,12 @@
         }
         data = await res.json();
       }
-      const { user, feedUrl, stats } = data;
+      const { user, feedUrl, stats, authError } = data;
+
+      if (authError) {
+        $('authError').textContent = authError + ' Your feed may stop updating until you reconnect.';
+        $('authError').hidden = false;
+      }
 
       $('name').textContent = user.name;
       $('email').textContent = user.email || 'no email';
@@ -168,6 +179,17 @@
       e.preventDefault();
       await api('/api/logout', { method: 'POST' });
       location.href = '/';
+    };
+
+    $('resetSessions').onclick = async () => {
+      if (!confirm('Sign out all devices? Other browsers and devices will need to sign in again, but this one stays signed in.')) return;
+      try {
+        const res = await api('/api/session/reset', { method: 'POST' });
+        const data = await res.json();
+        $('sessionsStatus').textContent = data.success ? 'All other devices signed out.' : 'Failed: ' + (data.error || res.status);
+      } catch (e) {
+        $('sessionsStatus').textContent = 'Error: ' + e.message;
+      }
     };
 
     $('delete').onclick = async () => {

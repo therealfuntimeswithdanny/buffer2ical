@@ -1,0 +1,3 @@
+# Copy to .dev.vars for `npm run dev` and fill in from your Buffer developer app.
+BUFFER_CLIENT_ID=
+BUFFER_CLIENT_SECRET=

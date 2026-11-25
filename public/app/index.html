@@ -33,10 +33,10 @@
   </aside>
 
   <main class="notes-all">
-    <p>¹Unlike API Keys, OAuth sessions expire after set amount of time. When your OAuth Session is about to expire (within 6 hours) you will receive email notice to your Buffer Account Email⁴.</p>
+    <p>¹OAuth is the recommended method: only the permissions this app needs are requested, access can be revoked per-app in your Buffer settings, and tokens are refreshed automatically — you stay signed in without lifting a finger. You would only need to sign in again if you revoke access in Buffer.</p>
     <p>²Unlike OAuth API keys never expire (unless set by the user in the Buffer Dashboard). API keys are less secure, anyone with your API key will have access to your Buffer Account (access controls are set by the user). API Keys don't use 2/MFA and don't require the user to enter their password or email. Do not share your key.</p>
     <p>³We do not recommended using Email Sign in. You must have already connected your Buffer Account to this app. Using Email Sign in will send a 6 digit code to your email. Your email must be the same as your Buffer Account</p>
-    <p>⁴ OAuth Session timeout detection is in beta testing, you may receive unwanted emails form sessiontimeout@alerts.buffer2ical.madebydanny.uk</p>
+    <p>⁴ OAuth access tokens are short-lived, but Buffer2iCal renews them automatically in the background, so your calendar feed keeps syncing.</p>
   </main>
 </div>
 </body>

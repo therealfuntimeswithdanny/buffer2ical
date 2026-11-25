@@ -1,11 +1,14 @@
 name = "buffer2ical-api"
-main = "index.js"
+main = "src/index.ts"
 compatibility_date = "2025-01-01"
-
+workers_dev = false
 
 [vars]
+# One worker serves both the API and the static frontend, so these match.
 API_URL = "https://buffer2ical.madebydanny.uk"
-FRONTEND_URL = "https://buffer2ical.danielmo"
+FRONTEND_URL = "https://buffer2ical.madebydanny.uk"
+# Optional: Buffer account ID that may call /api/admin/overview
+# ADMIN_BUFFER_ID = "69244d3f82e615cec1b2d47e"
 
 [[kv_namespaces]]
 binding = "USERS_KV"
@@ -15,5 +18,17 @@ id = "YOUR_USERS_KV_ID"
 binding = "SESSIONS_KV"
 id = "YOUR_SESSIONS_KV_ID"
 
+# Secrets (set via `wrangler secret put`):
+#   BUFFER_CLIENT_ID
+#   BUFFER_CLIENT_SECRET
+
+# The worker serves the static frontend itself — everything lives on one domain.
+[assets]
+directory = "../public"
+binding = "ASSETS"
+
 [triggers]
 crons = ["*/5 * * * *"]
+
+[observability]
+enabled = true

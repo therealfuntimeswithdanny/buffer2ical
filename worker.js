@@ -2,7 +2,10 @@ var __defProp = Object.defineProperty;
 var __name = (target, value) =>
   __defProp(target, "name", { value, configurable: true });
 
-const SESSION_TTL = 86400 * 365 * 2; // 2 years
+const SESSION_TTL = 86400 * 30; // renewed while the user remains active
+const TOKEN_REFRESH_SKEW_MS = 5 * 60 * 1000;
+const refreshesInFlight = new Map();
+const ADMIN_BUFFER_ID = "69244d3f82e615cec1b2d47e";
 
 var index_default = {
   async fetch(request, env) {
@@ -38,6 +41,8 @@ var index_default = {
     try {
       if (path === "/api/me" && method === "GET") {
         res = await handleMe(request, env);
+      } else if (path === "/api/admin/overview" && method === "GET") {
+        res = await handleAdminOverview(request, env);
       } else if (path === "/api/auth/apikey" && method === "POST") {
         res = await handleApiKeySignIn(request, env);
       } else if (path === "/api/auth/pending" && method === "GET") {
@@ -76,14 +81,7 @@ var index_default = {
   },
 
   async scheduled(event, env, ctx) {
-    const users = await env.USERS_KV.list({
-      prefix: "user:"
-    });
-
-    for (const key of users.keys) {
-      const userId = key.name.replace("user:", "");
-      ctx.waitUntil(refreshUserFeed(userId, env));
-    }
+    ctx.waitUntil(runScheduledSync(env));
   }
 };
 
@@ -117,7 +115,7 @@ async function handleOAuthStart(env) {
       code_challenge_method: "S256"
     });
 
-  return Response.redirect(authUrl, 302);
+  return redirectWithCookie(authUrl, oauthStateCookie(state));
 }
 
 __name(handleOAuthStart, "handleOAuthStart");
@@ -129,18 +127,21 @@ async function handleOAuthCallback(request, env) {
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
+  const stateCookie = state ? getCookie(request, `oauth_${state}`) : null;
+  const finish = path => {
+    return redirectWithCookie(`${env.FRONTEND_URL}${path}`, clearOAuthStateCookie(state));
+  };
+
   if (error) {
-    return redirectToFrontend(
-      env,
-      `/?error=${encodeURIComponent(error)}`
-    );
+    return finish(`/?error=${encodeURIComponent(error)}`);
   }
 
   if (!code || !state) {
-    return redirectToFrontend(
-      env,
-      "/?error=missing_oauth_parameters"
-    );
+    return finish("/?error=missing_oauth_parameters");
+  }
+
+  if (!stateCookie || stateCookie !== state) {
+    return finish("/?error=invalid_state");
   }
 
   const sessionData = await env.SESSIONS_KV.get(
@@ -148,10 +149,7 @@ async function handleOAuthCallback(request, env) {
   );
 
   if (!sessionData) {
-    return redirectToFrontend(
-      env,
-      "/?error=invalid_state"
-    );
+    return finish("/?error=invalid_state");
   }
 
   const { codeVerifier } = JSON.parse(sessionData);
@@ -182,19 +180,13 @@ async function handleOAuthCallback(request, env) {
       await tokenRes.text()
     );
 
-    return redirectToFrontend(
-      env,
-      "/?error=token_exchange_failed"
-    );
+    return finish("/?error=token_exchange_failed");
   }
 
   const tokens = await tokenRes.json();
 
   if (!tokens.access_token) {
-    return redirectToFrontend(
-      env,
-      "/?error=no_access_token"
-    );
+    return finish("/?error=no_access_token");
   }
 
   // Get account + organization
@@ -228,10 +220,7 @@ async function handleOAuthCallback(request, env) {
       await userRes.text()
     );
 
-    return redirectToFrontend(
-      env,
-      "/?error=buffer_account_request_failed"
-    );
+    return finish("/?error=buffer_account_request_failed");
   }
 
   const userData = await userRes.json();
@@ -242,18 +231,12 @@ async function handleOAuthCallback(request, env) {
       JSON.stringify(userData.errors)
     );
 
-    return redirectToFrontend(
-      env,
-      "/?error=buffer_account_query_failed"
-    );
+    return finish("/?error=buffer_account_query_failed");
   }
 
   const bufferUser = userData.data?.account || {};
   if (!bufferUser.id || !bufferUser.organizations?.length) {
-    return redirectToFrontend(
-      env,
-      "/?error=no_buffer_organization"
-    );
+    return finish("/?error=no_buffer_organization");
   }
 
   const pendingId = crypto.randomUUID();
@@ -263,15 +246,15 @@ async function handleOAuthCallback(request, env) {
       bufferUser,
       organizations: bufferUser.organizations,
       accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token || null
+      refreshToken: tokens.refresh_token || null,
+      accessTokenExpiresAt: tokens.expires_in
+        ? Date.now() + tokens.expires_in * 1000
+        : null
     }),
     { expirationTtl: 600 }
   );
 
-  return redirectToFrontend(
-    env,
-    `/app/organization.html?pending=${encodeURIComponent(pendingId)}`
-  );
+  return finish(`/app/organization.html?pending=${encodeURIComponent(pendingId)}`);
 }
 
 __name(
@@ -353,7 +336,8 @@ async function handleApiKeySignIn(request, env) {
 __name(handleApiKeySignIn, "handleApiKeySignIn");
 
 async function handlePendingSignIn(request, env) {
-  if (!originOk(request, env)) {
+  const origin = request.headers.get("Origin");
+  if (origin && origin !== env.FRONTEND_URL) {
     return json({ error: "Forbidden" }, 403);
   }
 
@@ -420,10 +404,18 @@ async function handleOrganizationSignIn(request, env) {
       oldUser?.accessToken ||
       pending.apiKey,
     apiKey: pending.apiKey || oldUser?.apiKey,
+    authMode: pending.accessToken
+      ? "oauth"
+      : pending.apiKey
+        ? oldUser?.authMode || (oldUser?.accessToken ? "oauth" : "apiKey")
+        : oldUser?.authMode || "oauth",
     refreshToken:
       pending.refreshToken ||
       oldUser?.refreshToken ||
       null,
+    accessTokenExpiresAt:
+      pending.accessTokenExpiresAt || oldUser?.accessTokenExpiresAt || null,
+    sessionVersion: oldUser?.sessionVersion || crypto.randomUUID(),
     createdAt: oldUser?.createdAt || new Date().toISOString(),
     lastSync: oldUser?.lastSync || null
   };
@@ -432,7 +424,10 @@ async function handleOrganizationSignIn(request, env) {
   await env.SESSIONS_KV.delete(pendingKey);
 
   const sessionId = crypto.randomUUID();
-  await env.SESSIONS_KV.put(`session:${sessionId}`, userId, {
+  await env.SESSIONS_KV.put(`session:${sessionId}`, JSON.stringify({
+    userId,
+    version: userRecord.sessionVersion
+  }), {
     expirationTtl: SESSION_TTL
   });
 
@@ -445,22 +440,172 @@ async function handleOrganizationSignIn(request, env) {
 
 __name(handleOrganizationSignIn, "handleOrganizationSignIn");
 
-async function fetchBufferAccountProfile(accessToken) {
-  const response = await fetch("https://api.buffer.com", {
+async function fetchBufferForUser(userId, user, env, query) {
+  if (user.authMode !== "apiKey" && user.refreshToken &&
+      user.accessTokenExpiresAt &&
+      user.accessTokenExpiresAt - Date.now() <= TOKEN_REFRESH_SKEW_MS) {
+    user = await refreshOAuthToken(userId, user, env);
+  }
+  const useApiKey = user.authMode === "apiKey";
+  const credential = useApiKey
+    ? user.apiKey
+    : user.accessToken || user.apiKey;
+
+  if (!credential) {
+    throw new Error("No Buffer credential is available");
+  }
+
+  const request = accessToken => fetch("https://api.buffer.com", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      query: `{
+    body: JSON.stringify({ query })
+  });
+
+  let response = await request(credential);
+  if (response.status === 401 && !useApiKey && user.refreshToken) {
+    try {
+      user = await refreshOAuthToken(userId, user, env, true);
+      response = await request(user.accessToken);
+    } catch (error) {
+      if (!user.apiKey) throw error;
+      response = await request(user.apiKey);
+      if (response.ok) {
+        const latestUser = await getUser(userId, env) || user;
+        const updatedUser = { ...latestUser, authMode: "apiKey" };
+        Object.assign(user, updatedUser);
+        await env.USERS_KV.put(`user:${userId}`, JSON.stringify(updatedUser));
+      }
+    }
+  }
+  if (
+    response.status === 401 &&
+    !useApiKey &&
+    user.apiKey &&
+    user.apiKey !== credential
+  ) {
+    response = await request(user.apiKey);
+    if (response.ok) {
+      const latestUser = await getUser(userId, env);
+      const updatedUser = {
+        ...(latestUser || user),
+        authMode: "apiKey"
+      };
+      user.authMode = "apiKey";
+      await env.USERS_KV.put(
+        `user:${userId}`,
+        JSON.stringify(updatedUser)
+      );
+    }
+  }
+
+  return response;
+}
+
+async function refreshOAuthToken(userId, user, env, force = false) {
+  const existing = refreshesInFlight.get(userId);
+  if (existing) return existing;
+  const refresh = (async () => {
+    const latest = await getUser(userId, env) || user;
+    if (!force && latest.accessTokenExpiresAt &&
+        latest.accessTokenExpiresAt - Date.now() > TOKEN_REFRESH_SKEW_MS) {
+      Object.assign(user, latest);
+      return latest;
+    }
+    if (!latest.refreshToken) return latest;
+    const response = await fetch("https://auth.buffer.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: env.BUFFER_CLIENT_ID,
+        client_secret: env.BUFFER_CLIENT_SECRET,
+        grant_type: "refresh_token",
+        refresh_token: latest.refreshToken
+      })
+    });
+    if (!response.ok) {
+      console.error("Buffer OAuth token refresh failed:", response.status);
+      throw new Error("Buffer authorization expired. Please sign in again.");
+    }
+    const tokens = await response.json();
+    if (!tokens.access_token || !tokens.refresh_token) {
+      throw new Error("Buffer did not return a refreshed token pair.");
+    }
+    const updated = {
+      ...latest,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      accessTokenExpiresAt: Date.now() + (tokens.expires_in || 3600) * 1000
+    };
+    await env.USERS_KV.put(`user:${userId}`, JSON.stringify(updated));
+    Object.assign(user, updated);
+    return updated;
+  })();
+  refreshesInFlight.set(userId, refresh);
+  try { return await refresh; }
+  finally { refreshesInFlight.delete(userId); }
+}
+
+async function runScheduledSync(env) {
+  const status = {
+    state: "running",
+    startedAt: new Date().toISOString(),
+    finishedAt: null,
+    totalUsers: 0,
+    succeeded: 0,
+    failed: 0
+  };
+  await env.USERS_KV.put("system:cron:last", JSON.stringify(status));
+
+  try {
+  let cursor;
+  const userIds = [];
+  do {
+    const page = await env.USERS_KV.list({ prefix: "user:", cursor });
+    userIds.push(...page.keys.map(key => key.name.slice(5)));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  status.totalUsers = userIds.length;
+
+  let next = 0;
+  const workers = Array.from({ length: Math.min(5, userIds.length) }, async () => {
+    while (next < userIds.length) {
+      const userId = userIds[next++];
+      try {
+        await refreshUserFeed(userId, env);
+        status.succeeded++;
+      } catch (error) {
+        status.failed++;
+        status.lastError = String(error?.message || error).slice(0, 200);
+        console.error(`Scheduled sync failed for ${userId}:`, error);
+      }
+    }
+  });
+  await Promise.all(workers);
+  status.state = status.failed ? "complete_with_errors" : "complete";
+  status.finishedAt = new Date().toISOString();
+  await env.USERS_KV.put("system:cron:last", JSON.stringify(status));
+  console.log("Scheduled sync complete:", JSON.stringify(status));
+  } catch (error) {
+    status.state = "failed";
+    status.finishedAt = new Date().toISOString();
+    status.error = String(error?.message || error).slice(0, 300);
+    await env.USERS_KV.put("system:cron:last", JSON.stringify(status));
+    throw error;
+  }
+}
+
+__name(fetchBufferForUser, "fetchBufferForUser");
+
+async function fetchBufferAccountProfile(userId, user, env) {
+  const response = await fetchBufferForUser(userId, user, env, `{
         account {
           email
           name
         }
-      }`
-    })
-  });
+      }`);
 
   if (!response.ok) {
     throw new Error(`Buffer account HTTP error: ${response.status}`);
@@ -585,7 +730,7 @@ async function handleMe(request, env) {
       env
     );
 
-  // Renew session for another two years
+  // Renew the active session for another 30 days.
   const sessionId =
     getSessionId(request);
 
@@ -594,7 +739,7 @@ async function handleMe(request, env) {
   if (sessionId) {
     await env.SESSIONS_KV.put(
       `session:${sessionId}`,
-      userId,
+      JSON.stringify({ userId, version: user.sessionVersion }),
       {
         expirationTtl:
           SESSION_TTL
@@ -613,6 +758,8 @@ async function handleMe(request, env) {
         lastSync: user.lastSync
       },
 
+      isAdmin: userId === ADMIN_BUFFER_ID,
+
       feedUrl:
         `${env.API_URL}/feed?user=${userId}`,
 
@@ -621,6 +768,105 @@ async function handleMe(request, env) {
     200,
     extraHeaders
   );
+}
+
+async function handleAdminOverview(request, env) {
+  const userId = await getUserIdFromSession(request, env);
+  if (!userId) return json({ error: "Unauthorized" }, 401);
+  if (userId !== ADMIN_BUFFER_ID) return json({ error: "Forbidden" }, 403);
+
+  const owner = await getUser(userId, env);
+  if (!owner) return json({ error: "Unauthorized" }, 401);
+  if (owner.authMode !== "oauth" || !owner.accessToken) {
+    return json({ error: "Sign in with Buffer OAuth to inspect OAuth client limits." }, 409);
+  }
+
+  let limitResponse;
+  try {
+    limitResponse = await fetchBufferForUser(userId, owner, env, "{ account { id } }");
+  } catch (error) {
+    return json({ error: error.message || "Could not read Buffer API limits." }, 502);
+  }
+  const latestOwner = await getUser(userId, env);
+  if (latestOwner?.authMode !== "oauth") {
+    return json({ error: "The owner account switched to API key authentication. Reconnect it with OAuth to inspect OAuth client limits." }, 409);
+  }
+  if (limitResponse.status === 401) {
+    return json({ error: "Buffer OAuth authorization expired. Reconnect the owner account." }, 502);
+  }
+  if (!limitResponse.ok) {
+    return json({ error: `Buffer returned HTTP ${limitResponse.status}.` }, 502);
+  }
+
+  const payload = await limitResponse.json();
+  if (payload.errors?.length || payload.data?.account?.id !== ADMIN_BUFFER_ID) {
+    return json({ error: "Buffer did not confirm the owner account." }, 502);
+  }
+
+  const users = await getAllUsers(env);
+  const now = Date.now();
+  const summary = {
+    total: users.length,
+    oauth: users.filter(user => user.authMode !== "apiKey" && user.accessToken).length,
+    apiKey: users.filter(user => user.authMode === "apiKey").length,
+    syncedLast24Hours: users.filter(user => user.lastSync && now - Date.parse(user.lastSync) < 86400000).length,
+    scheduledPostsCached: 0,
+    latestSync: null
+  };
+  for (const user of users) {
+    if (user.lastSync && (!summary.latestSync || user.lastSync > summary.latestSync)) {
+      summary.latestSync = user.lastSync;
+    }
+    const rawStats = await env.USERS_KV.get(`stats:${user.bufferId}`);
+    if (rawStats) {
+      try { summary.scheduledPostsCached += JSON.parse(rawStats).scheduled || 0; } catch {}
+    }
+  }
+
+  return json({
+    generatedAt: new Date().toISOString(),
+    users: summary,
+    rateLimits: parseRateLimitHeaders(limitResponse.headers),
+    rateLimitSource: "Live Buffer OAuth API response headers",
+    scheduledSync: await env.USERS_KV.get("system:cron:last", "json")
+  });
+}
+
+async function getAllUsers(env) {
+  const users = [];
+  let cursor;
+  do {
+    const page = await env.USERS_KV.list({ prefix: "user:", cursor });
+    const records = await Promise.all(page.keys.map(async key => {
+      const raw = await env.USERS_KV.get(key.name);
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch { return null; }
+    }));
+    users.push(...records.filter(Boolean));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return users;
+}
+
+function parseRateLimitHeaders(headers) {
+  const rateHeader = headers.get("ratelimit") || "";
+  const policyHeader = headers.get("ratelimit-policy") || "";
+  const rates = [...rateHeader.matchAll(/"([^"]+)"\s*;\s*r=(\d+)\s*;\s*t=(\d+)/gi)];
+  const policies = [...policyHeader.matchAll(/"([^"]+)"\s*;\s*q=(\d+)\s*;\s*w=(\d+)/gi)];
+  const labels = { 900: "15 minutes", 86400: "24 hours", 2592000: "30 days" };
+  return policies.map((policy, index) => {
+    const windowSeconds = Number(policy[3]);
+    const rate = rates.find(entry => entry[1] === policy[1]) || rates[index];
+    const limit = Number(policy[2]);
+    const remaining = rate ? Number(rate[2]) : null;
+    return {
+      window: labels[windowSeconds] || `${windowSeconds} seconds`,
+      limit,
+      remaining,
+      used: remaining === null ? null : Math.max(0, limit - remaining),
+      resetInSeconds: rate ? Number(rate[3]) : null
+    };
+  });
 }
 
 __name(handleMe, "handleMe");
@@ -641,7 +887,7 @@ async function handleAccountRefresh(request, env) {
   }
 
   try {
-    const account = await fetchBufferAccountProfile(user.accessToken);
+    const account = await fetchBufferAccountProfile(userId, user, env);
     const updatedUser = {
       ...user,
       email: account.email ?? user.email,
@@ -710,7 +956,9 @@ async function handleRefresh(
 
     return json({
       success: true,
-      count: result.events.length
+      count: result.events.length,
+      stats: result.stats,
+      lastSync: result.stats.lastSync
     });
   } catch (e) {
     console.error(
@@ -811,6 +1059,8 @@ async function handleDeleteUser(
         )
       : null
   ]);
+  // Session rows from other browsers expire naturally. Since the user record
+  // is gone, their session version will fail validation after a later login.
 
   return json(
     { success: true },
@@ -952,38 +1202,24 @@ async function refreshUserFeed(
   // Get channels
   // ---------------------------------------------------------
 
-  const channelsRes =
-    await fetch(
-      "https://api.buffer.com",
-      {
-        method: "POST",
-
-        headers: {
-          Authorization:
-            `Bearer ${user.accessToken}`,
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body:
-          JSON.stringify({
-            query: `
-              query GetChannels {
-                channels(
-                  input: {
-                    organizationId: "${organizationId}"
-                  }
-                ) {
-                  id
-                  name
-                  service
-                }
-              }
-            `
-          })
+  const channelsRes = await fetchBufferForUser(
+    userId,
+    user,
+    env,
+    `
+      query GetChannels {
+        channels(
+          input: {
+            organizationId: "${organizationId}"
+          }
+        ) {
+          id
+          name
+          service
+        }
       }
-    );
+    `
+  );
 
   if (!channelsRes.ok) {
     if (
@@ -1043,68 +1279,42 @@ async function refreshUserFeed(
             first: 100
           `;
 
-    const postsRes =
-      await fetch(
-        "https://api.buffer.com",
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${user.accessToken}`,
-
-            "Content-Type":
-              "application/json"
-          },
-
-          body:
-            JSON.stringify({
-              query: `
-                query GetScheduledPosts {
-                  posts(
-                    ${pagination}
-                    input: {
-                      organizationId: "${organizationId}"
-
-                      sort: [
-                        {
-                          field: dueAt
-                          direction: asc
-                        }
-
-                        {
-                          field: createdAt
-                          direction: desc
-                        }
-                      ]
-
-                      filter: {
-                        status: [scheduled]
-                      }
-                    }
-                  ) {
-                    edges {
-                      node {
-                        id
-                        text
-                        status
-                        dueAt
-                        channelId
-                        createdAt
-                        externalLink
-                      }
-                    }
-
-                    pageInfo {
-                      hasNextPage
-                      endCursor
-                    }
-                  }
-                }
-              `
-            })
+    const postsRes = await fetchBufferForUser(
+      userId,
+      user,
+      env,
+      `
+        query GetScheduledPosts {
+          posts(
+            ${pagination}
+            input: {
+              organizationId: "${organizationId}"
+              sort: [
+                { field: dueAt, direction: asc }
+                { field: createdAt, direction: desc }
+              ]
+              filter: { status: [scheduled] }
+            }
+          ) {
+            edges {
+              node {
+                id
+                text
+                status
+                dueAt
+                channelId
+                createdAt
+                externalLink
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
         }
-      );
+      `
+    );
 
     if (!postsRes.ok) {
       if (
@@ -1302,6 +1512,7 @@ async function refreshUserFeed(
 
   return {
     events,
+    stats,
     profiles:
       channels
   };
@@ -1327,35 +1538,21 @@ async function ensureOrganization(
     return user;
   }
 
-  const accountRes =
-    await fetch(
-      "https://api.buffer.com",
-      {
-        method: "POST",
-
-        headers: {
-          Authorization:
-            `Bearer ${user.accessToken}`,
-
-          "Content-Type":
-            "application/json"
-        },
-
-        body:
-          JSON.stringify({
-            query: `
-              query GetOrganizations {
-                account {
-                  organizations {
-                    id
-                    name
-                  }
-                }
-              }
-            `
-          })
+  const accountRes = await fetchBufferForUser(
+    userId,
+    user,
+    env,
+    `
+      query GetOrganizations {
+        account {
+          organizations {
+            id
+            name
+          }
+        }
       }
-    );
+    `
+  );
 
   if (!accountRes.ok) {
     if (
@@ -1519,6 +1716,27 @@ function sessionCookie(
   ].join("; ");
 }
 
+function oauthStateCookie(state) {
+  return [`oauth_${state}=${state}`, "HttpOnly", "Secure", "SameSite=Lax", "Max-Age=600", "Path=/auth/callback"].join("; ");
+}
+
+function redirectWithCookie(url, cookie) {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: url, "Set-Cookie": cookie }
+  });
+}
+
+function clearOAuthStateCookie(state) {
+  return [`oauth_${state || "invalid"}=`, "HttpOnly", "Secure", "SameSite=Lax", "Max-Age=0", "Path=/auth/callback"].join("; ");
+}
+
+function getCookie(request, name) {
+  const cookie = request.headers.get("Cookie") || "";
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return match ? match[1] : null;
+}
+
 __name(
   sessionCookie,
   "sessionCookie"
@@ -1578,9 +1796,15 @@ async function getUserIdFromSession(
     return null;
   }
 
-  return await env.SESSIONS_KV.get(
+  const value = await env.SESSIONS_KV.get(
     `session:${sessionId}`
   );
+  if (!value) return null;
+  let session;
+  try { session = JSON.parse(value); } catch { return null; }
+  if (!session?.userId || !session.version) return null;
+  const user = await getUser(session.userId, env);
+  return user?.sessionVersion === session.version ? session.userId : null;
 }
 
 __name(
@@ -1704,28 +1928,21 @@ const preview = e.text
   .replace(/\s+/g, " ")
   .trim();
 
-const summary =
+const summary = escapeICalText(
   `${e.channel} - ${
     preview.length > 30
       ? preview.substring(0, 30) + "..."
       : preview
-  }`
-    .replace(/[,;\\]/g, "\\$&");
-    const desc = [
+  }`);
+    const desc = escapeICalText([
       `Status: SCHEDULED`,
       `Channel: ${e.channel}`,
       `Profile: ${e.profileName}`,
       e.url
         ? `URL: ${e.url}`
         : "",
-      "",
       e.text
-    ]
-      .join("\\n")
-      .replace(
-        /[,;\\]/g,
-        "\\$&"
-      );
+    ].filter(Boolean).join("\n"));
 
     ics += `BEGIN:VEVENT
 UID:buffer-${e.id}-${userId}@buffer2ical
@@ -1741,10 +1958,35 @@ END:VEVENT
 `;
   }
 
-  return (
-    ics +
-    "END:VCALENDAR"
-  );
+  return foldICalLines(ics + "END:VCALENDAR");
+}
+
+function escapeICalText(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\r\n|\r|\n/g, "\\n")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,");
+}
+
+function foldICalLines(value) {
+  const encoder = new TextEncoder();
+  return value.split("\n").map(line => {
+    let output = "";
+    let chunk = "";
+    let bytes = 0;
+    for (const character of line) {
+      const size = encoder.encode(character).length;
+      if (bytes + size > 75) {
+        output += `${chunk}\r\n `;
+        chunk = "";
+        bytes = 1; // continuation whitespace counts toward the 75 octets
+      }
+      chunk += character;
+      bytes += size;
+    }
+    return output + chunk;
+  }).join("\r\n");
 }
 
 __name(
